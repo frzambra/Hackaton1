@@ -1,0 +1,309 @@
+---
+title: "Hackathon Summer School 2022"
+subtitle: "Classification of pasture areas through EO data and machine learning"
+author: "Francisco Zambrano"
+format:
+  html:
+    number-sections: true
+    number-depth: 3
+    smooth-scroll: true
+    code-fold: show
+    toc: true
+    html-math-method: katex
+    self-contained: true
+execute: 
+  cache: false
+editor: visual
+---
+
+![](https://opengeohub.org/wp-content/uploads/2021/11/logo-9.png)
+![](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSl9z7lcZVAyjbDF1d5iG8ig7oxquCHY4ZLw2ebUturbEi2RPAOQ4IAChiRI9iS4h38iWo&usqp=CAU){width="200"}
+![](https://upload.wikimedia.org/wikipedia/commons/thumb/c/cc/CHL_orthographic_%28%2Ball_claims%29.svg/260px-CHL_orthographic_%28%2Ball_claims%29.svg.png){width=150}
+
+# Background
+
+Land use and land cover (LULC) change is a key topic to understand the human footprint and environmental impacts on the planet [(Winkler et al., 2019)](https://doi.org/10.1038/s41467-021-22702-2). In recent years the convergence of publicly available Earth Observation (EO) data [(Ma, Y. et al., 2015)](https://doi.org/10.1016/j.future.2014.10.029), more accessible cloud-computing platforms and modern machine learning (ML) techniques ([Gorelick et al., 2017](https://doi.org/10.1016/j.rse.2017.06.031); [Schramm et al., 2021](https://doi.org/10.3390/rs13061125)) allowed the production of several LULC maps at national [(Souza et al., 2020)](https://doi.org/10.3390/rs12172735), continental [(Witjes et al., 2022)](https://doi.org/10.7717/peerj.13573) and global scale [(Venter et al., 2022)](https://doi.org/10.3390/rs14164101). In general, these products are self-consistent, which means that they map consistently different LULC classes considering distinct training samples and ML techniques, an aspect that makes the comparison across them challenging [(Venter et al., 2022)](https://doi.org/10.3390/rs14164101). Even so, most of them report a relatively low accuracy for pasture / grasslands classes, a LULC class that suffers from a lack of precise definitions able to incorporate cross-disciplinary evidence of animal production systems into mapping products [(Phelps et al., 2017)](https://doi.org/10.1111/gcb.13732). These areas are well-known to be the single most extensive land cover class of the Earth's ice-free land surface [(Ellis et al., 2010)](https://doi.org/10.1016/j.rse.2017.06.031) and highly affected by climate change [(Gao et al., 2016)](https://doi.org/10.1038/srep26958). Considering the global relevance of this LULC class [WRI](https://www.wri.org/), [OpenGeoHub](https://opengeohub.org/), [LAPIG](https://lapig.iesa.ufg.br/) and [IIASA](https://iiasa.ac.at/) initiated a Global Pastures Monitoring project supported by the [Land & Carbon Lab (LCL) initiative](https://www.landcarbonlab.org/).
+
+# Task definition
+
+The task is to develop a reproducible computation notebook using your favorite programming language (Julia, Python or R) explaining step-by-step the implemented workflow and providing evidence for any claims that you make.
+
+The computation notebook must include at least the following steps (minimum requirements):
+
+1)  Download and access the training, validation and test set files publicly available in Parquet and CSV format,
+2)  Train a machine learning model able to predict the three land cover classes established by the dataset (column class),
+3)  Predict the test set using the trained model,
+4)  Upload your predictions in a Google Drive and insert the URL link to access them in this [Google Sheet](https://docs.google.com/spreadsheets/d/1ng5YIUA6eoe_mQm0rXLd3dQ3cPGgJv6AAqktVT9KWvY/edit#gid=0), so we can derive a macro average f1-score (arithmetic mean of f1-score for the three classes, which is insensitive to the imbalance of the classes). IMPORTANT: Remember to change the access of uploaded file to "Anyone with the link".
+
+# Procedure
+
+## Download and read the data
+
+```{r}
+#| message: false
+library(arrow)
+
+read_pq_from_url <- function(url) {
+  dst <- basename(url)
+  
+  if (!file.exists(dst)) {
+    download.file(url, dst);
+  } 
+  
+  return( read_parquet(dst) )
+}
+
+train_url <-'https://s3.eu-central-1.wasabisys.com/global-pastures/samples/lcv_pasture_classif.matrix.train_2000..2020_brazil.eumap_summer.school.2022.pq'
+val_url <- 'https://s3.eu-central-1.wasabisys.com/global-pastures/samples/lcv_pasture_classif.matrix.val_2000..2020_brazil.eumap_summer.school.2022.pq'
+test_url <- 'https://s3.eu-central-1.wasabisys.com/global-pastures/samples/lcv_pasture_classif.matrix.test_2000..2020_brazil.eumap_summer.school.2022.pq'
+
+train_data <- read_pq_from_url(train_url)
+val_data <- read_pq_from_url(val_url)
+test_data <- read_pq_from_url(test_url)
+```
+
+## Merging datasets
+
+The training and validation datasets were merged for training the models. The prediction data it is `pred_data`.
+
+```{r}
+#| message: false
+## 02. Creating additional covariates
+library(dplyr)
+library(tidyr)
+
+data <- train_data |> 
+  bind_rows(val_data) |> 
+  as_tibble() |> 
+  select(-c(tile_id:longitude,class_pct,class_label)) |> 
+  drop_na() |> 
+  mutate(class = as.factor(class)) |> 
+  janitor::clean_names() |> 
+  select(-index_level_0) 
+
+new_data <- test_data |> 
+  as_tibble() |> 
+  select(-c(tile_id:longitude)) |> 
+  drop_na() |> 
+  janitor::clean_names() |> 
+  select(-index_level_0) 
+```
+
+## Setting seed and a logger
+
+```{r}
+set.seed(321)
+lgr::get_logger("mlr3")$set_threshold("warn")
+lgr::get_logger("bbotk")$set_threshold("warn")
+```
+
+## Task and partition of train and test dataset
+```{r}
+library(mlr3)
+task <- as_task_classif(data, target = "class",id = 'train')
+split <- partition(task,ratio = .7)
+```
+
+## Learners selected for the classification
+
+First, I created the `task` using the `train_data`, the target is the `class` variable.
+
+I selected the following learners:
+
+1)  `glmnet` : Lasso and Elastic-Net Regularized Generalized Linear Models ([{glmnet}](https://cran.r-project.org/web/packages/glmnet/index.html)),
+2)  `ranger` : A Fast Implementation of Random Forests, ([{ranger}](https://cran.r-project.org/web/packages/ranger/ranger.pdf))
+3)  `naive_bayes`, Naive Bayes Classifier ([`{e1071}`](https://search.r-project.org/CRAN/refmans/e1071/html/naiveBayes.html))
+4)  `svm`: as the learnes tha will be stacked for the classification. ([`{e1071}`](https://search.r-project.org/CRAN/refmans/e1071/html/naiveBayes.html))
+
+```{r}
+library(mlr3learners)
+lrn_glmnet = lrn("classif.glmnet", predict_type = "prob")
+lrn_ranger = lrn("classif.ranger", predict_type = "prob")
+lrn_nb = lrn("classif.naive_bayes",predict_type = "prob")
+lrn_svm = lrn("classif.svm", predict_type = "prob")
+```
+
+## Pipeline {mlr3pipelines}
+
+To train the stacked models I used `{mlr3pipelines}` by layers. The layers were:
+
+1)  `level_0` : feature selection using `{mlr3filters}` and out-of-bag predictions for the learners
+2)  `level_1` : principal components analysis (PCA) and out-of-bag predictions for the learners
+3)  `level_2` : random forest with `{ranger}`
+
+### level_0
+
+```{r}
+#| out.width="100%"
+library(mlr3pipelines)
+
+cv2_glmnet = po("learner_cv", lrn_glmnet, id = "glmnet_2")
+cv2_ranger = po("learner_cv", lrn_ranger, id = "ranger_2")
+cv2_nb = po("learner_cv", lrn_nb, id = "nb_2")
+cv2_svm = po("learner_cv", lrn_svm, id = "svm_2")
+
+# 07.- Filters for feature selection
+library(mlr3filters)
+jmi1 = po("filter", flt("jmi"), id = "filt_jmi1",filter.nfeat =2)
+jmi2 = po("filter", flt("jmi"), id = "filt_jmi2",filter.nfeat =2)
+jmi3 = po("filter", flt("jmi"), id = "filt_jmi3",filter.nfeat =2)
+jmi4 = po("filter", flt("jmi"), id = "filt_jmi4",filter.nfeat =2)
+
+# 08.- union for level0
+
+level_0 = gunion(list(
+  jmi1 %>>% cv2_glmnet,
+  jmi2 %>>% cv2_ranger,
+  jmi3 %>>% cv2_nb,
+  jmi4 %>>% cv2_svm,
+  po("nop", id = "nop1")))  %>>%
+  po("featureunion", id = "union1")
+
+level_0$plot()
+```
+
+### level_1
+
+```{r}
+#| out.width="100%"
+
+cv3_glmnet = po("learner_cv", lrn_glmnet, id = "glmnet_3")
+cv3_ranger = po("learner_cv", lrn_ranger, id = "ranger_3")
+cv3_nb = po("learner_cv", lrn_nb, id = "nb_3")
+cv3_svm = po("learner_cv", lrn_svm, id = "svm_3")
+
+level_1 = level_0 %>>%
+  po("copy", 5) %>>%
+  gunion(list(
+    po("pca", id = "pca_1", param_vals = list(scale. = TRUE)) %>>% cv3_glmnet,
+    po("pca", id = "pca_2", param_vals = list(scale. = TRUE)) %>>% cv3_ranger,
+    po("pca", id = "pca_3", param_vals = list(scale. = TRUE)) %>>% cv3_nb,
+    po("pca", id = "pca_4", param_vals = list(scale. = TRUE)) %>>% cv3_svm,
+    po("nop", id = "nop3")
+  )) %>>%
+  po("featureunion", id = "union2")
+
+level_1$plot()
+```
+
+### level_2
+
+```{r}
+#| out.width="100%"
+
+lrn_ranger = lrn("classif.ranger", predict_type = "prob",id='ranger')
+
+level_2 = level_1 %>>%
+  po("featureunion", 3, id = "u2") %>>%
+  po("learner", lrn_ranger, id = "ranger")
+
+level_2$plot()
+```
+
+## Tunning and training
+
+Defining the space of search for some of the parameters of the learners,
+
+```{r}
+#| warning: false
+#| eval: false
+
+lrn = as_learner(level_2)
+
+search_space = ps(
+  filt_jmi1.filter.nfeat = p_int(5,50),
+  filt_jmi2.filter.nfeat = p_int(5,50),
+  filt_jmi3.filter.nfeat = p_int(5,50),
+  filt_jmi4.filter.nfeat = p_int(5,50),
+  pca_1.rank. = p_int(3, 50),
+  pca_2.rank. = p_int(3, 50),
+  pca_3.rank. = p_int(3, 20),
+  glmnet_2.alpha = p_dbl(0,1),
+  ranger_2.mtry = p_int(1,10),
+  ranger_2.sample.fraction = p_dbl(0,1),
+  ranger_2.num.trees = p_int(1,2000),
+  svm_2.kernel = p_fct(levels =c('linear','polynomial','radial','sigmoid')),
+  glmnet_3.alpha = p_dbl(0,1),
+  ranger_3.mtry = p_int(1,10),
+  ranger_3.sample.fraction = p_dbl(0,1),
+  ranger_3.num.trees = p_int(1,2000),
+  svm_3.kernel = p_fct(levels =c('linear','polynomial','radial','sigmoid')),
+  ranger_end.mtry = p_int(1, 10),
+  ranger_end.sample.fraction = p_dbl(0.5, 1),
+  ranger_end.num.trees = p_int(50, 200)
+)
+```
+
+Creating the auto tunner learner `at`
+
+```{r}
+#| eval: false
+library(mlr3tuning)
+at = auto_tuner(
+  method = "random_search",
+  learner = lrn,
+  resampling = rsmp("cv"),
+  search_space = search_space,
+  measure = msr("classif.mauc_aunu"),
+  term_evals = 3) 
+
+```
+
+Running the training and tunning the model
+
+```{r}
+#| eval: false
+future::plan('multisession')
+progressr::with_progress({
+  at$train(task, split$train)
+})
+```
+
+## The model trained
+
+```{r}
+#| echo: false
+#| include: false
+at <- readRDS('data/data_processed/model6.rds')
+```
+
+```{r}
+at$model
+```
+
+## Performance
+
+To evaluate the performance of the model I used the test dataset (30% from data)
+
+```{r}
+#| eval: true
+#| warning: false
+prediction_test = at$predict_newdata(data[split$test,])
+prediction_test
+```
+
+The metrics used to evaluate the model are accuracy (acc), multiclass brier score, and the  multiclass auc score (mauc_aunu).
+
+
+```{r}
+measure_acc = msr("classif.acc")
+measure_brier =msr("classif.mbrier")
+measure_mauc =msr("classif.mauc_aunu")
+
+acc <- prediction_test$score(measure_acc)
+mbrier <- prediction_test$score(measure_brier)
+mauc_aunu <- prediction_test$score(measure_mauc)
+
+data.frame(metric = c('acc','mbrier','mauc_aunu'),value = c(acc,mbrier,mauc_aunu))
+```
+
+## Prediction over new data
+
+```{r}
+#| warning: false
+prediction_new = at$predict_newdata(new_data)
+prediction_new
+```
+
+
+## Resampling
