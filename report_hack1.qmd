@@ -62,6 +62,24 @@ val_data <- read_pq_from_url(val_url)
 test_data <- read_pq_from_url(test_url)
 ```
 
+<!-- ## Visualizing -->
+
+<!-- ```{r} -->
+<!-- library(tmap) -->
+<!-- library(sf) -->
+<!-- ## Setting seed and a logger -->
+<!-- train_sf <- st_as_sf(train_data,coords = c('longitude','latitude'), crs = 4326) -->
+<!-- val_sf <- st_as_sf(val_data,coords = c('longitude','latitude'), crs = 4326) -->
+
+<!-- tmap_mode('view') -->
+
+<!-- tm_shape(train_sf) +  -->
+<!--   tm_dots(col='red') + -->
+<!--   tm_shape(val_sf) + -->
+<!--   tm_dots(col = 'blue') -->
+
+<!-- ``` -->
+
 ## Merging datasets
 
 The training and validation datasets were merged for training the models. The prediction data it is `pred_data`.
