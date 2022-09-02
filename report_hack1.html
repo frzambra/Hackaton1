@@ -2570,6 +2570,7 @@ vertical-align: -.125em;
 <h1 data-number="3"><span class="header-section-number">3</span> Procedure</h1>
 <section id="download-and-read-the-data" class="level2" data-number="3.1">
 <h2 data-number="3.1" class="anchored" data-anchor-id="download-and-read-the-data"><span class="header-section-number">3.1</span> Download and read the data</h2>
+<p>To download the data I used the script recommended with the instruction of the hackaton. The data was in parquet format and was read with <code>arrow::read_parquet</code> function.</p>
 <div class="cell">
 <details open>
 <summary>Code</summary>
@@ -2646,6 +2647,7 @@ vertical-align: -.125em;
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>lgr<span class="sc">::</span><span class="fu">get_logger</span>(<span class="st">&quot;bbotk&quot;</span>)<span class="sc">$</span><span class="fu">set_threshold</span>(<span class="st">&quot;warn&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
+<p>I created a task with the data merged using the varibale “class” as the target for the model. Then I made a partition of the data using 70% for training and 30% for testing.</p>
 </section>
 <section id="task-and-partition-of-train-and-test-dataset" class="level2" data-number="3.4">
 <h2 data-number="3.4" class="anchored" data-anchor-id="task-and-partition-of-train-and-test-dataset"><span class="header-section-number">3.4</span> Task and partition of train and test dataset</h2>
@@ -2772,7 +2774,7 @@ vertical-align: -.125em;
 </section>
 <section id="tunning-and-training" class="level2" data-number="3.7">
 <h2 data-number="3.7" class="anchored" data-anchor-id="tunning-and-training"><span class="header-section-number">3.7</span> Tunning and training</h2>
-<p>Defining the space of search for some of the parameters of the learners,</p>
+<p>I defined the space of search for some of the parameters of the learners,</p>
 <div class="cell">
 <details open>
 <summary>Code</summary>
@@ -2802,7 +2804,7 @@ vertical-align: -.125em;
 <span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
-<p>Creating the auto tunner learner <code>at</code></p>
+<p>Then, I created the auto tunner learner <code>at</code></p>
 <div class="cell">
 <details open>
 <summary>Code</summary>
@@ -2816,7 +2818,7 @@ vertical-align: -.125em;
 <span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">term_evals =</span> <span class="dv">3</span>) </span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
-<p>Running the training and tunning the model</p>
+<p>Running the training and tunning the model on the train dataset,</p>
 <div class="cell">
 <details open>
 <summary>Code</summary>
