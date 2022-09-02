@@ -39,6 +39,8 @@ The computation notebook must include at least the following steps (minimum requ
 
 ## Download and read the data
 
+To download the data I used the script recommended with the instruction of the hackaton. The data was in parquet format and was read with `arrow::read_parquet` function.
+
 ```{r}
 #| message: false
 library(arrow)
@@ -114,6 +116,8 @@ set.seed(321)
 lgr::get_logger("mlr3")$set_threshold("warn")
 lgr::get_logger("bbotk")$set_threshold("warn")
 ```
+
+I created a task with the data merged using the varibale "class" as the target for the model. Then I made a partition of the data using 70% for training and 30% for testing. 
 
 ## Task and partition of train and test dataset
 ```{r}
@@ -220,7 +224,7 @@ level_2$plot()
 
 ## Tunning and training
 
-Defining the space of search for some of the parameters of the learners,
+I defined the space of search for some of the parameters of the learners,
 
 ```{r}
 #| warning: false
@@ -252,7 +256,7 @@ search_space = ps(
 )
 ```
 
-Creating the auto tunner learner `at`
+Then, I created the auto tunner learner `at`
 
 ```{r}
 #| eval: false
@@ -267,7 +271,7 @@ at = auto_tuner(
 
 ```
 
-Running the training and tunning the model
+Running the training and tunning the model on the train dataset,
 
 ```{r}
 #| eval: false
