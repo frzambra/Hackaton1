@@ -1,7 +1,7 @@
 ---
 title: "Hackathon Summer School 2022"
 subtitle: "Classification of pasture areas through EO data and machine learning"
-author: "Francisco Zambrano"
+author: "Francisco Zambrano (from Chile)"
 format:
   html:
     number-sections: true
@@ -84,7 +84,7 @@ test_data <- read_pq_from_url(test_url)
 
 ## Merging datasets
 
-The training and validation datasets were merged for training the models. The prediction data it is `pred_data`.
+The training and validation datasets were merged to create an unifed dataset, then this dataset was spli into `training` and `test`. The prediction data in which I want to run the model will be `new_data`.
 
 ```{r}
 #| message: false
@@ -130,12 +130,12 @@ split <- partition(task,ratio = .7)
 
 First, I created the `task` using the `train_data`, the target is the `class` variable.
 
-I selected the following learners:
+I selected the following learners, as the ones that will be stacked for the classification.
 
 1)  `glmnet` : Lasso and Elastic-Net Regularized Generalized Linear Models ([{glmnet}](https://cran.r-project.org/web/packages/glmnet/index.html)),
 2)  `ranger` : A Fast Implementation of Random Forests, ([{ranger}](https://cran.r-project.org/web/packages/ranger/ranger.pdf))
 3)  `naive_bayes`, Naive Bayes Classifier ([`{e1071}`](https://search.r-project.org/CRAN/refmans/e1071/html/naiveBayes.html))
-4)  `svm`: as the learnes tha will be stacked for the classification. ([`{e1071}`](https://search.r-project.org/CRAN/refmans/e1071/html/naiveBayes.html))
+4)  `svm`:  super vector machine ([`{e1071}`](https://search.r-project.org/CRAN/refmans/e1071/html/naiveBayes.html))
 
 ```{r}
 library(mlr3learners)
